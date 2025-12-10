@@ -7,6 +7,8 @@ const initDatabase = async () => {
   if (isProduction) {
     // PostgreSQL table creation
     try {
+      // Check if tables exist first, then create only if needed
+      
       // Users table
       await db.run(`
         CREATE TABLE IF NOT EXISTS users (
@@ -15,65 +17,70 @@ const initDatabase = async () => {
           email VARCHAR(255) UNIQUE NOT NULL,
           password VARCHAR(255) NOT NULL,
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+        );
       `);
 
       // Wallets table
       await db.run(`
         CREATE TABLE IF NOT EXISTS wallets (
           id SERIAL PRIMARY KEY,
-          userId INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          userId INTEGER UNIQUE NOT NULL,
           balance DECIMAL(15,2) DEFAULT 100000,
           totalInvested DECIMAL(15,2) DEFAULT 0,
-          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_wallet_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        );
       `);
 
       // Portfolios table
       await db.run(`
         CREATE TABLE IF NOT EXISTS portfolios (
           id SERIAL PRIMARY KEY,
-          userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          userId INTEGER NOT NULL,
           symbol VARCHAR(10) NOT NULL,
           companyName VARCHAR(255),
           quantity INTEGER NOT NULL,
           avgPrice DECIMAL(15,2) NOT NULL,
           firstBuyDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           lastUpdated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(userId, symbol)
-        )
+          CONSTRAINT fk_portfolio_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT unique_user_symbol UNIQUE(userId, symbol)
+        );
       `);
 
       // Transactions table
       await db.run(`
         CREATE TABLE IF NOT EXISTS transactions (
           id SERIAL PRIMARY KEY,
-          userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          userId INTEGER NOT NULL,
           symbol VARCHAR(10) NOT NULL,
           companyName VARCHAR(255),
           transactionType VARCHAR(10) NOT NULL,
           quantity INTEGER NOT NULL,
           price DECIMAL(15,2) NOT NULL,
           totalAmount DECIMAL(15,2) NOT NULL,
-          transactionDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+          transactionDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_transaction_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        );
       `);
 
       // Watchlists table
       await db.run(`
         CREATE TABLE IF NOT EXISTS watchlists (
           id SERIAL PRIMARY KEY,
-          userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          userId INTEGER NOT NULL,
           symbol VARCHAR(10) NOT NULL,
           companyName VARCHAR(255),
           addedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(userId, symbol)
-        )
+          CONSTRAINT fk_watchlist_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT unique_watchlist_user_symbol UNIQUE(userId, symbol)
+        );
       `);
 
       console.log('✅ PostgreSQL database tables created successfully');
     } catch (error) {
       console.error('Error creating PostgreSQL tables:', error);
+      throw error;
     }
   } else {
     // SQLite table creation (existing code)
