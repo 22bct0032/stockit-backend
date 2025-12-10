@@ -2,127 +2,125 @@ const db = require('../config/database');
 const stockService = require('../services/stockService');
 
 exports.getWatchlist = async (req, res) => {
-  const userId = req.userId;
+  try {
+    const userId = req.userId;
 
-  db.all(
-    'SELECT * FROM watchlists WHERE userId = ? ORDER BY addedAt DESC',
-    [userId],
-    async (err, watchlist) => {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Database error' });
-      }
+    const watchlist = await db.all(
+      'SELECT * FROM watchlists WHERE userId = $1 ORDER BY addedAt DESC',
+      [userId]
+    );
 
-      // Enrich with current prices
-      const enrichedWatchlist = await Promise.all(
-        watchlist.map(async (item) => {
-          const stockData = await stockService.getStockQuote(item.symbol);
-          return {
-            symbol: item.symbol,
-            companyName: item.companyName,
-            price: stockData.data.currentPrice,
-            change: stockData.data.change,
-            changePercent: stockData.data.changePercent,
-            high: stockData.data.high,
-            low: stockData.data.low,
-            volume: stockData.data.volume,
-            addedAt: item.addedAt,
-            inWatchlist: true
-          };
-        })
-      );
+    // Enrich with current prices
+    const enrichedWatchlist = await Promise.all(
+      watchlist.map(async (item) => {
+        const stockData = await stockService.getStockQuote(item.symbol);
+        return {
+          symbol: item.symbol,
+          companyName: item.companyname || item.companyName,
+          price: stockData.data.currentPrice,
+          change: stockData.data.change,
+          changePercent: stockData.data.changePercent,
+          high: stockData.data.high,
+          low: stockData.data.low,
+          volume: stockData.data.volume,
+          addedAt: item.addedat || item.addedAt,
+          inWatchlist: true
+        };
+      })
+    );
 
-      res.json({
-        success: true,
-        totalStocks: enrichedWatchlist.length,
-        stocks: enrichedWatchlist,
-        timestamp: new Date().toISOString()
-      });
-    }
-  );
+    res.json({
+      success: true,
+      totalStocks: enrichedWatchlist.length,
+      stocks: enrichedWatchlist,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Get watchlist error:', error);
+    res.status(500).json({ success: false, message: 'Database error' });
+  }
 };
 
 exports.addToWatchlist = async (req, res) => {
-  const userId = req.userId;
-  const { symbol } = req.body;
-
-  if (!symbol) {
-    return res.status(400).json({ success: false, message: 'Symbol is required' });
-  }
-
   try {
+    const userId = req.userId;
+    const { symbol } = req.body;
+
+    if (!symbol) {
+      return res.status(400).json({ success: false, message: 'Symbol is required' });
+    }
+
     const stockData = await stockService.getStockQuote(symbol);
 
-    db.run(
-      'INSERT INTO watchlists (userId, symbol, companyName) VALUES (?, ?, ?)',
-      [userId, symbol.toUpperCase(), stockData.data.companyName],
-      function(err) {
-        if (err) {
-          if (err.message.includes('UNIQUE')) {
-            return res.status(409).json({ success: false, message: 'Stock already in watchlist' });
-          }
-          return res.status(500).json({ success: false, message: 'Database error' });
-        }
-
-        res.json({
-          success: true,
-          added: true,
-          symbol: symbol.toUpperCase(),
-          companyName: stockData.data.companyName,
-          message: 'Added to watchlist',
-          timestamp: new Date().toISOString()
-        });
-      }
+    await db.run(
+      'INSERT INTO watchlists (userId, symbol, companyName) VALUES ($1, $2, $3)',
+      [userId, symbol.toUpperCase(), stockData.data.companyName]
     );
+
+    res.json({
+      success: true,
+      added: true,
+      symbol: symbol.toUpperCase(),
+      companyName: stockData.data.companyName,
+      message: 'Added to watchlist',
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
+    console.error('Add to watchlist error:', error);
+    if (error.message && error.message.includes('unique')) {
+      return res.status(409).json({ success: false, message: 'Stock already in watchlist' });
+    }
     res.status(500).json({ success: false, message: 'Failed to add to watchlist' });
   }
 };
 
-exports.removeFromWatchlist = (req, res) => {
-  const userId = req.userId;
-  const { symbol } = req.params;
+exports.removeFromWatchlist = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { symbol } = req.params;
 
-  db.run(
-    'DELETE FROM watchlists WHERE userId = ? AND symbol = ?',
-    [userId, symbol.toUpperCase()],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Database error' });
-      }
+    const result = await db.run(
+      'DELETE FROM watchlists WHERE userId = $1 AND symbol = $2',
+      [userId, symbol.toUpperCase()]
+    );
 
-      if (this.changes === 0) {
-        return res.status(404).json({ success: false, message: 'Stock not in watchlist' });
-      }
+    const changes = result.rowCount || result.changes || 0;
 
-      res.json({
-        success: true,
-        removed: true,
-        symbol: symbol.toUpperCase(),
-        message: 'Removed from watchlist',
-        timestamp: new Date().toISOString()
-      });
+    if (changes === 0) {
+      return res.status(404).json({ success: false, message: 'Stock not in watchlist' });
     }
-  );
+
+    res.json({
+      success: true,
+      removed: true,
+      symbol: symbol.toUpperCase(),
+      message: 'Removed from watchlist',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Remove from watchlist error:', error);
+    res.status(500).json({ success: false, message: 'Database error' });
+  }
 };
 
-exports.checkWatchlistStatus = (req, res) => {
-  const userId = req.userId;
-  const { symbol } = req.params;
+exports.checkWatchlistStatus = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { symbol } = req.params;
 
-  db.get(
-    'SELECT * FROM watchlists WHERE userId = ? AND symbol = ?',
-    [userId, symbol.toUpperCase()],
-    (err, item) => {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Database error' });
-      }
+    const item = await db.get(
+      'SELECT * FROM watchlists WHERE userId = $1 AND symbol = $2',
+      [userId, symbol.toUpperCase()]
+    );
 
-      res.json({
-        success: true,
-        inWatchlist: !!item,
-        symbol: symbol.toUpperCase(),
-        timestamp: new Date().toISOString()
-      });
-    }
-  );
+    res.json({
+      success: true,
+      inWatchlist: !!item,
+      symbol: symbol.toUpperCase(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Check watchlist status error:', error);
+    res.status(500).json({ success: false, message: 'Database error' });
+  }
 };
