@@ -5,35 +5,34 @@ const initDatabase = async () => {
   const isProduction = process.env.NODE_ENV === 'production';
   
   if (isProduction) {
-    // PostgreSQL table creation
+    // PostgreSQL table creation - create tables first, then add foreign keys
     try {
-      // Check if tables exist first, then create only if needed
+      console.log('Creating PostgreSQL tables...');
       
-      // Users table
-      await db.run(`
+      // Users table (no foreign keys)
+      await db.query(`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           fullName VARCHAR(255) NOT NULL,
           email VARCHAR(255) UNIQUE NOT NULL,
           password VARCHAR(255) NOT NULL,
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+        )
       `);
 
-      // Wallets table
-      await db.run(`
+      // Wallets table (no foreign keys yet)
+      await db.query(`
         CREATE TABLE IF NOT EXISTS wallets (
           id SERIAL PRIMARY KEY,
           userId INTEGER UNIQUE NOT NULL,
           balance DECIMAL(15,2) DEFAULT 100000,
           totalInvested DECIMAL(15,2) DEFAULT 0,
-          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_wallet_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-        );
+          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
       `);
 
-      // Portfolios table
-      await db.run(`
+      // Portfolios table (no foreign keys yet)
+      await db.query(`
         CREATE TABLE IF NOT EXISTS portfolios (
           id SERIAL PRIMARY KEY,
           userId INTEGER NOT NULL,
@@ -43,13 +42,12 @@ const initDatabase = async () => {
           avgPrice DECIMAL(15,2) NOT NULL,
           firstBuyDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           lastUpdated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_portfolio_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-          CONSTRAINT unique_user_symbol UNIQUE(userId, symbol)
-        );
+          UNIQUE(userId, symbol)
+        )
       `);
 
-      // Transactions table
-      await db.run(`
+      // Transactions table (no foreign keys yet)
+      await db.query(`
         CREATE TABLE IF NOT EXISTS transactions (
           id SERIAL PRIMARY KEY,
           userId INTEGER NOT NULL,
@@ -59,22 +57,20 @@ const initDatabase = async () => {
           quantity INTEGER NOT NULL,
           price DECIMAL(15,2) NOT NULL,
           totalAmount DECIMAL(15,2) NOT NULL,
-          transactionDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_transaction_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-        );
+          transactionDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
       `);
 
-      // Watchlists table
-      await db.run(`
+      // Watchlists table (no foreign keys yet)
+      await db.query(`
         CREATE TABLE IF NOT EXISTS watchlists (
           id SERIAL PRIMARY KEY,
           userId INTEGER NOT NULL,
           symbol VARCHAR(10) NOT NULL,
           companyName VARCHAR(255),
           addedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_watchlist_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-          CONSTRAINT unique_watchlist_user_symbol UNIQUE(userId, symbol)
-        );
+          UNIQUE(userId, symbol)
+        )
       `);
 
       console.log('✅ PostgreSQL database tables created successfully');
